@@ -8,8 +8,10 @@ from kesslergame import Scenario, KesslerGame, GraphicsType
 from test_controller import TestController
 from scott_dick_controller import ScottDickController
 from graphics_both import GraphicsBoth
+from FuzzyController import FuzzyController
+
 my_test_scenario = Scenario(name='Test Scenario',
-                            num_asteroids=5,
+                            num_asteroids=10,
                             ship_states=[
                             {'position': (400, 400), 'angle': 90, 'lives': 3, 'team': 1},
                             {'position': (600, 400), 'angle': 90, 'lives': 3, 'team': 2},
@@ -26,8 +28,10 @@ game_settings = {'perf_tracker': True,
 game = KesslerGame(settings=game_settings) # Use this to visualize the game scenario
 # game = TrainerEnvironment(settings=game_settings) # Use this for max-speed, no-graphics simulation
 pre = time.perf_counter()
-score, perf_data = game.run(scenario=my_test_scenario, controllers = [TestController(), ScottDickController()])
-print('Scenario eval time: '+str(time.perf_counter()-pre))
+chromosome = [[-200, -200, -120], [-200, -22, 0], [-100, 0, 100], [0, 107, 200], [125, 200, 200]]
+fuzzy_controller = FuzzyController(False, chromosome)
+score, perf_data = game.run(scenario=my_test_scenario, controllers = [ScottDickController(), fuzzy_controller])
+print('Scenario eval time: '+ str(time.perf_counter()-pre))
 print(score.stop_reason)
 print('Asteroids hit: ' + str([team.asteroids_hit for team in score.teams]))
 print('Deaths: ' + str([team.deaths for team in score.teams]))
