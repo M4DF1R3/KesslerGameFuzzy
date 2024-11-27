@@ -9,14 +9,16 @@ from test_controller import TestController
 from scott_dick_controller import ScottDickController
 from graphics_both import GraphicsBoth
 from FuzzyController import FuzzyController
+import random
 
 my_test_scenario = Scenario(name='Test Scenario',
-                            num_asteroids=10,
+                            num_asteroids=40,
                             ship_states=[
                             {'position': (400, 400), 'angle': 90, 'lives': 3, 'team': 1},
                             {'position': (600, 400), 'angle': 90, 'lives': 3, 'team': 2},
                             ],
                             map_size=(1000, 800),
+                            seed = random.seed(1),
                             time_limit=60,
                             ammo_limit_multiplier=0,
                             stop_if_no_ammo=False)

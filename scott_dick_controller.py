@@ -242,7 +242,7 @@ class ScottDickController(KesslerController):
         self.eval_frames +=1
         
         #DEBUG
-        print(thrust, bullet_t, shooting_theta, turn_rate, fire)
+        # print(thrust, bullet_t, shooting_theta, turn_rate, fire)
         
         return thrust, turn_rate, fire, drop_mine
 
