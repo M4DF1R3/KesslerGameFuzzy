@@ -67,7 +67,17 @@ class FuzzyController(KesslerController):
         ship_thrust['Z'] = fuzz.trimf(ship_thrust.universe, self.chromosome[2])
         ship_thrust['PS'] = fuzz.trimf(ship_thrust.universe, self.chromosome[3])
         ship_thrust['PM'] = fuzz.trimf(ship_thrust.universe, self.chromosome[4])
-                
+        # Add asteroid_distance antecedent
+        asteroid_distance = ctrl.Antecedent(np.arange(0, 1000, 50), 'asteroid_distance')
+        asteroid_distance['Close'] = fuzz.trimf(asteroid_distance.universe, [0, 0, 400])
+        asteroid_distance['Medium'] = fuzz.trimf(asteroid_distance.universe, [200, 500, 800])
+        asteroid_distance['Far'] = fuzz.trimf(asteroid_distance.universe, [600, 1000, 1000])
+
+        # Add deploy_mine consequent
+        deploy_mine = ctrl.Consequent(np.arange(-1, 2, 1), 'deploy_mine')  # -1 -> Hold, +1 -> Deploy
+        deploy_mine['Hold'] = fuzz.trimf(deploy_mine.universe, [-1, -1, 0])
+        deploy_mine['Deploy'] = fuzz.trimf(deploy_mine.universe, [0, 1, 1])
+
         #Declare each fuzzy rule
         rule1 = ctrl.Rule(bullet_time['L'] & theta_delta['NL'], (ship_turn['NL'], ship_fire['N'], ship_thrust['PM']))
         rule2 = ctrl.Rule(bullet_time['L'] & theta_delta['NM'], (ship_turn['NM'], ship_fire['N'], ship_thrust['PM']))
@@ -76,7 +86,7 @@ class FuzzyController(KesslerController):
         rule5 = ctrl.Rule(bullet_time['L'] & theta_delta['PS'], (ship_turn['PS'], ship_fire['Y'], ship_thrust['PM']))
         rule6 = ctrl.Rule(bullet_time['L'] & theta_delta['PM'], (ship_turn['PM'], ship_fire['N'], ship_thrust['PM']))
         rule7 = ctrl.Rule(bullet_time['L'] & theta_delta['PL'], (ship_turn['PL'], ship_fire['N'], ship_thrust['PM']))
-        rule8 = ctrl.Rule(bullet_time['M'] & theta_delta['NL'], (ship_turn['NL'], shcip_fire['N'], ship_thrust['PS']))
+        rule8 = ctrl.Rule(bullet_time['M'] & theta_delta['NL'], (ship_turn['NL'], ship_fire['N'], ship_thrust['PS']))
         rule9 = ctrl.Rule(bullet_time['M'] & theta_delta['NM'], (ship_turn['NM'], ship_fire['N'], ship_thrust['PS']))
         rule10 = ctrl.Rule(bullet_time['M'] & theta_delta['NS'], (ship_turn['NS'], ship_fire['Y'], ship_thrust['PS']))
         rule11 = ctrl.Rule(bullet_time['M'] & theta_delta['Z'], (ship_turn['Z'], ship_fire['Y'], ship_thrust['NS']))
@@ -90,7 +100,11 @@ class FuzzyController(KesslerController):
         rule19 = ctrl.Rule(bullet_time['S'] & theta_delta['PS'], (ship_turn['PS'], ship_fire['Y'], ship_thrust['NM']))
         rule20 = ctrl.Rule(bullet_time['S'] & theta_delta['PM'], (ship_turn['PM'], ship_fire['Y'], ship_thrust['NS']))
         rule21 = ctrl.Rule(bullet_time['S'] & theta_delta['PL'], (ship_turn['PL'], ship_fire['Y'], ship_thrust['Z']))
-        
+        # Rules for deploying mines
+        rule_mine_1 = ctrl.Rule(asteroid_distance['Close'] & bullet_time['L'], deploy_mine['Deploy'])
+        rule_mine_2 = ctrl.Rule(asteroid_distance['Medium'] & theta_delta['Z'], deploy_mine['Deploy'])
+        rule_mine_3 = ctrl.Rule(asteroid_distance['Far'], deploy_mine['Deploy'])
+
              
         #DEBUG
         #bullet_time.view()
@@ -103,7 +117,11 @@ class FuzzyController(KesslerController):
         # This is an instance variable, and thus available for other methods in the same object. See notes.                         
         # self.targeting_control = ctrl.ControlSystem([rule1, rule2, rule3, rule4, rule5, rule6, rule7, rule8, rule9, rule10, rule11, rule12, rule13, rule14, rule15])
              
-        targeting_control = ctrl.ControlSystem()
+        targeting_control = ctrl.ControlSystem([
+        rule1, rule2, rule3, rule4, rule5, rule6, rule7, rule8, rule9,
+        rule10, rule11, rule12, rule13, rule14, rule15, rule16, rule17,
+        rule18, rule19, rule20, rule21, rule_mine_1, rule_mine_2, rule_mine_3
+         ])
         targeting_control.addrule(rule1)
         targeting_control.addrule(rule2)
         targeting_control.addrule(rule3)
@@ -125,6 +143,12 @@ class FuzzyController(KesslerController):
         targeting_control.addrule(rule19)
         targeting_control.addrule(rule20)
         targeting_control.addrule(rule21)
+        # Add deploy_mine rules to the control system
+        targeting_control.addrule(rule_mine_1)
+        targeting_control.addrule(rule_mine_2)
+        targeting_control.addrule(rule_mine_3)
+
+
 
         return targeting_control
 
@@ -192,7 +216,9 @@ class FuzzyController(KesslerController):
         
         # Determinant of the quadratic formula b^2-4ac
         targ_det = (-2 * closest_asteroid["dist"] * asteroid_vel * cos_my_theta2)**2 - (4*(asteroid_vel**2 - bullet_speed**2) * closest_asteroid["dist"])
-        
+        if targ_det < 0:
+        # No valid intercept, return default actions
+            return 0, 0, False, False
         # Combine the Law of Cosines with the quadratic formula for solve for intercept time. Remember, there are two values produced.
         intrcpt1 = ((2 * closest_asteroid["dist"] * asteroid_vel * cos_my_theta2) + math.sqrt(targ_det)) / (2 * (asteroid_vel**2 -bullet_speed**2))
         intrcpt2 = ((2 * closest_asteroid["dist"] * asteroid_vel * cos_my_theta2) - math.sqrt(targ_det)) / (2 * (asteroid_vel**2-bullet_speed**2))
@@ -228,7 +254,8 @@ class FuzzyController(KesslerController):
         
         shooting.input['bullet_time'] = bullet_t
         shooting.input['theta_delta'] = shooting_theta
-        
+        shooting.input['asteroid_distance'] = closest_asteroid["dist"]
+
         shooting.compute()
         
         # Get the defuzzified outputs
@@ -240,8 +267,13 @@ class FuzzyController(KesslerController):
             fire = False
         
         thrust = 4 * shooting.output['ship_thrust']
+        # Mine deployment decision
+        deploy_mine_output = shooting.output['deploy_mine']
+        drop_mine = deploy_mine_output > 0  # Deploy mine if output > 0
+        print(f"Inputs to Fuzzy System: Bullet Time: {bullet_t}, Theta Delta: {shooting_theta}, Asteroid Distance: {closest_asteroid['dist']}")
 
-        drop_mine = False
+        print(f"Deploy Mine Output: {deploy_mine_output}")
+        #drop_mine = False
         
         self.eval_frames +=1
         
