@@ -19,6 +19,10 @@ class FuzzyController(KesslerController):
             self.chromosome = chromosome # Pass in chromosome
 
         self.targeting_control = self.setup_fuzzy_controller()
+        self.escaping_mine_frames = 0  # Tracks the number of frames in escape mode
+        self.escape_heading = None  # Stores the escape direction
+        self.mine_cooldown_frames = 0  # Tracks cooldown period after dropping a mine
+
 
         
     def setup_fuzzy_controller(self):
@@ -69,7 +73,7 @@ class FuzzyController(KesslerController):
         ship_thrust['PM'] = fuzz.trimf(ship_thrust.universe, self.chromosome[4])
         # Add asteroid_distance antecedent
         asteroid_distance = ctrl.Antecedent(np.arange(0, 1000, 50), 'asteroid_distance')
-        asteroid_distance['Close'] = fuzz.trimf(asteroid_distance.universe, [0, 0, 400])
+        asteroid_distance['Close'] = fuzz.trimf(asteroid_distance.universe, [0, 0, 100])
         asteroid_distance['Medium'] = fuzz.trimf(asteroid_distance.universe, [200, 500, 800])
         asteroid_distance['Far'] = fuzz.trimf(asteroid_distance.universe, [600, 1000, 1000])
 
@@ -101,9 +105,10 @@ class FuzzyController(KesslerController):
         rule20 = ctrl.Rule(bullet_time['S'] & theta_delta['PM'], (ship_turn['PM'], ship_fire['Y'], ship_thrust['NS']))
         rule21 = ctrl.Rule(bullet_time['S'] & theta_delta['PL'], (ship_turn['PL'], ship_fire['Y'], ship_thrust['Z']))
         # Rules for deploying mines
-        rule_mine_1 = ctrl.Rule(asteroid_distance['Close'] & bullet_time['L'], deploy_mine['Deploy'])
-        rule_mine_2 = ctrl.Rule(asteroid_distance['Medium'] & theta_delta['Z'], deploy_mine['Deploy'])
-        rule_mine_3 = ctrl.Rule(asteroid_distance['Far'], deploy_mine['Deploy'])
+        rule_mine_close = ctrl.Rule(asteroid_distance['Close'] & ship_thrust['Z'], deploy_mine['Deploy'])
+        rule_mine_medium = ctrl.Rule(asteroid_distance['Medium'] & bullet_time['L'], deploy_mine['Deploy'])
+        rule_mine_far = ctrl.Rule(asteroid_distance['Far'], deploy_mine['Hold'])  # Default: Don't deploy
+
 
              
         #DEBUG
@@ -120,7 +125,7 @@ class FuzzyController(KesslerController):
         targeting_control = ctrl.ControlSystem([
         rule1, rule2, rule3, rule4, rule5, rule6, rule7, rule8, rule9,
         rule10, rule11, rule12, rule13, rule14, rule15, rule16, rule17,
-        rule18, rule19, rule20, rule21, rule_mine_1, rule_mine_2, rule_mine_3
+        rule18, rule19, rule20, rule21, rule_mine_close, rule_mine_medium, rule_mine_far
          ])
         targeting_control.addrule(rule1)
         targeting_control.addrule(rule2)
@@ -144,9 +149,9 @@ class FuzzyController(KesslerController):
         targeting_control.addrule(rule20)
         targeting_control.addrule(rule21)
         # Add deploy_mine rules to the control system
-        targeting_control.addrule(rule_mine_1)
-        targeting_control.addrule(rule_mine_2)
-        targeting_control.addrule(rule_mine_3)
+        targeting_control.addrule(rule_mine_close)
+        targeting_control.addrule(rule_mine_medium)
+        targeting_control.addrule(rule_mine_far)
 
 
 
@@ -260,26 +265,42 @@ class FuzzyController(KesslerController):
         
         # Get the defuzzified outputs
         turn_rate = shooting.output['ship_turn']
-        
+        deploy_mine_output = shooting.output.get('deploy_mine', 0)
+        if self.mine_cooldown_frames > 0:
+            self.mine_cooldown_frames -= 1
+
+        if self.escaping_mine_frames > 0:
+            self.escaping_mine_frames -= 1
+
         if shooting.output['ship_fire'] >= 0:
             fire = True
         else:
             fire = False
-        
-        thrust = 4 * shooting.output['ship_thrust']
-        # Mine deployment decision
-        deploy_mine_output = shooting.output['deploy_mine']
-        drop_mine = deploy_mine_output > 0  # Deploy mine if output > 0
-        print(f"Inputs to Fuzzy System: Bullet Time: {bullet_t}, Theta Delta: {shooting_theta}, Asteroid Distance: {closest_asteroid['dist']}")
+        drop_mine = False
 
-        print(f"Deploy Mine Output: {deploy_mine_output}")
-        #drop_mine = False
+
+        if self.mine_cooldown_frames == 0 and deploy_mine_output > 0:
+            drop_mine = True
+            self.mine_cooldown_frames = 90  # Cooldown duration (e.g., 90 frames)
+            self.escaping_mine_frames = 30  # Escape duration (e.g., 30 frames)
+            self.escape_heading = (ship_state["heading"] + 180) % 360  # Escape direction (opposite)
+
+        if self.escaping_mine_frames > 0:
+            # Apply high thrust in escape direction
+            escape_rad = math.radians(self.escape_heading)
+            thrust = 200  # High thrust for escaping
+            print(f"Escaping! Heading: {self.escape_heading}, Thrust: {thrust}")
+        else:
+            # Normal thrust logic
+            thrust = 4 * shooting.output['ship_thrust']
+
         
         self.eval_frames +=1
         
         #DEBUG
         # print(thrust, bullet_t, shooting_theta, turn_rate, fire)
-        
+        print(f"Returning -> Thrust: {thrust}, Turn Rate: {turn_rate}, Fire: {fire}, Drop Mine: {drop_mine}")
+
         return thrust, turn_rate, fire, drop_mine
         
     @property
