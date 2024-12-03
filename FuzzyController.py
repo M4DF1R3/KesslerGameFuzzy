@@ -1,3 +1,7 @@
+# ECE 449 Group 8
+# Kevin Qian, Henry Zhu, Raghav Sharma
+# Acknowledgements: Scott Dick
+
 import time
 from kesslergame import GraphicsType, KesslerController, Scenario, TrainerEnvironment # In Eclipse, the name of the library is kesslergame, not src.kesslergame
 from typing import Dict, Tuple
@@ -5,24 +9,19 @@ import skfuzzy as fuzz
 from skfuzzy import control as ctrl
 import math
 import numpy as np
-from EasyGA import *
 from test_controller import TestController
 
 class FuzzyController(KesslerController):
-    def __init__(self, run_genetics, chromosome):
-        if run_genetics:
-            if chromosome is None:
-                self.chromosome = get_best_chromosome().gene_value_list[0]
-            else:
-                self.chromosome = chromosome.gene_value_list[0]
-        else:
-            self.chromosome = chromosome # Pass in chromosome
-
+    def __init__(self):
         self.targeting_control = self.setup_fuzzy_controller()
         self.escaping_mine_frames = 0  # Tracks the number of frames in escape mode
         self.mine_cooldown_frames = 0  # Tracks cooldown period after dropping a mine
         
     def setup_fuzzy_controller(self):
+        """
+        Set up the fuzzy system
+        Credit: Scott Dick for implementing most of the antecedents, consequents, and rules.
+        """
         self.eval_frames = 0 #What is this?
 
         # self.targeting_control is the targeting rulebase, which is static in this controller.      
@@ -62,12 +61,12 @@ class FuzzyController(KesslerController):
         #   and returned as the boolean 'fire'
         ship_fire['N'] = fuzz.trimf(ship_fire.universe, [-1,-1,0.0])
         ship_fire['Y'] = fuzz.trimf(ship_fire.universe, [0.0,1,1])
-        
-        ship_thrust['NM'] = fuzz.trimf(ship_thrust.universe, self.chromosome[0])
-        ship_thrust['NS'] = fuzz.trimf(ship_thrust.universe, self.chromosome[1])
-        ship_thrust['Z'] = fuzz.trimf(ship_thrust.universe, self.chromosome[2])
-        ship_thrust['PS'] = fuzz.trimf(ship_thrust.universe, self.chromosome[3])
-        ship_thrust['PM'] = fuzz.trimf(ship_thrust.universe, self.chromosome[4])
+
+        ship_thrust['NM'] = fuzz.trimf(ship_thrust.universe, [-200, -200, -120])
+        ship_thrust['NS'] = fuzz.trimf(ship_thrust.universe, [-200, -22, 0])
+        ship_thrust['Z'] = fuzz.trimf(ship_thrust.universe, [-100, 0, 100])
+        ship_thrust['PS'] = fuzz.trimf(ship_thrust.universe, [0, 107, 200])
+        ship_thrust['PM'] = fuzz.trimf(ship_thrust.universe, [125, 200, 200])
         
         # Add asteroid_distance antecedent
         asteroid_distance = ctrl.Antecedent(np.arange(0, 1000, 50), 'asteroid_distance')
@@ -195,9 +194,7 @@ class FuzzyController(KesslerController):
                 asteroid_angle = asteroid_angle * 180 / np.pi
                 if asteroid_angle < 0:
                     asteroid_angle = 360 + asteroid_angle
-                elif asteroid_angle > 360:
-                    print("Error")
-                    # asteroid_angle = asteroid_angle % 360
+                
                 asteroids.append(asteroid)
                 asteroid_angles.append(asteroid_angle)
                 time_collision.append(t_ca)
@@ -208,6 +205,7 @@ class FuzzyController(KesslerController):
     def actions(self, ship_state: Dict, game_state: Dict) -> Tuple[float, float, bool]:
         """
         Method processed each time step by this controller.
+        Credit: Scott Dick for implementing the shooting and ship turning
         """
         # These were the constant actions in the basic demo, just spinning and shooting.
         #thrust = 0 <- How do the values scale with asteroid velocity vector?
@@ -232,10 +230,9 @@ class FuzzyController(KesslerController):
         closest_asteroid = None
         
         asteroids, collision_count, asteroid_angles, time_collision, closest_asteroid_distance = self.find_colliding_asteroids(ship_state, game_state)
-        print(collision_count, time_collision)
+        
         if collision_count == 0 or self.escaping_mine_frames > 0:
             asteroids = game_state["asteroids"]
-
 
         for a in asteroids:
             #Loop through all asteroids, find minimum Eudlidean distance
@@ -258,8 +255,6 @@ class FuzzyController(KesslerController):
         # Side D of the triangle is given by closest_asteroid.dist. Need to get the asteroid-ship direction
         #    and the angle of the asteroid's current movement.
         # REMEMBER TRIG FUNCTIONS ARE ALL IN RADAINS!!!
-        
-        
         asteroid_ship_x = ship_pos_x - closest_asteroid["aster"]["position"][0]
         asteroid_ship_y = ship_pos_y - closest_asteroid["aster"]["position"][1]
         
@@ -351,60 +346,3 @@ class FuzzyController(KesslerController):
     @property
     def name(self) -> str:
         return "Fuzzy Controller"
-
-def fitness(chromosome):
-    my_test_scenario = Scenario(name='Test Scenario',
-                        num_asteroids=10,
-                        ship_states=[
-                        {'position': (400, 400), 'angle': 90, 'lives': 3, 'team': 1},
-                        {'position': (600, 400), 'angle': 90, 'lives': 3, 'team': 2},
-                        ],
-                        map_size=(1000, 800),
-                        time_limit=60,
-                        ammo_limit_multiplier=0,
-                        stop_if_no_ammo=False)
-    game_settings = {'perf_tracker': True,
-                    'graphics_type': GraphicsType.Tkinter,
-                    'realtime_multiplier': 1,
-                    'graphics_obj': None}
-    game = TrainerEnvironment(settings=game_settings) # Use this for max-speed, no-graphics simulation
-    _ = time.perf_counter()
-    fuzzy_controller = FuzzyController(True, chromosome)
-    score, _ = game.run(scenario=my_test_scenario, controllers = [TestController(), fuzzy_controller])
-    
-    return score.teams[1].asteroids_hit - 50*score.teams[1].deaths
-        
-def generate_chromosome():
-    # Thrust MF
-    thrust_nm = np.random.randint(-150, -99)
-    thrust_ns = np.random.randint(-50, 1)
-    thrust_z = np.random.randint(-50, 51)
-    thrust_ps = np.random.randint(50, 151)
-    thrust_pm = np.random.randint(100, 151)
-    thrust_nm = [-200, -200, thrust_nm]
-    thrust_ns = [-200, thrust_ns, 0]
-    thrust_z = [-100, thrust_z, 100]
-    thrust_ps = [0, thrust_ps, 200]
-    thrust_pm = [thrust_pm, 200, 200]
-
-    chromosome = [
-        thrust_nm,
-        thrust_ns,
-        thrust_z,
-        thrust_ps,
-        thrust_pm,
-    ]
-    return chromosome
-
-def get_best_chromosome():        
-    ga = EasyGA.GA()
-    ga.gene_impl = generate_chromosome
-    ga.chromosome_length = 1
-    ga.population_size = 5
-    ga.target_fitness_type = 'max'
-    ga.generation_goal = 1
-    ga.fitness_function_impl = fitness
-    ga.evolve()
-    ga.print_best_chromosome()
-
-    return ga.population[0]

@@ -9,58 +9,42 @@ from test_controller import TestController
 from scott_dick_controller import ScottDickController
 from graphics_both import GraphicsBoth
 from FuzzyController import FuzzyController
-from FuzzyController2 import FuzzyController2
+
 import random
-def run_test(seed):
-    my_test_scenario = Scenario(name='Test Scenario',
-                                num_asteroids=20,
-                                ship_states=[
-                                {'position': (400, 400), 'angle': 90, 'lives': 3, 'team': 1, 'mines_remaining': 3},
-                                # {'position': (600, 400), 'angle': 90, 'lives': 3, 'team': 2, 'mines_remaining': 3},
-                                ],
-                                map_size=(1000, 800),
-                                seed = random.seed(16),
-                                # num_asteroids=20,
-                                # ship_states=[
-                                # {'position': (400, 400), 'angle': 90, 'lives': 3, 'team': 1, 'mines_remaining': 5},
-                                # {'position': (600, 400), 'angle': 90, 'lives': 3, 'team': 2, 'mines_remaining': 5},
-                                # ],
-                                # map_size=(1000, 800),
-                                # seed = random.seed(1),
-                                time_limit=60,
-                                ammo_limit_multiplier=0,
-                                stop_if_no_ammo=False)
 
-    game_settings = {'perf_tracker': True,
-                    'graphics_type': GraphicsType.Tkinter,
-                    'realtime_multiplier': 1,
-                    'graphics_obj': None}
-    game = KesslerGame(settings=game_settings) # Use this to visualize the game scenario
-    # game = TrainerEnvironment(settings=game_settings) # Use this for max-speed, no-graphics simulation
-    pre = time.perf_counter()
-    chromosome = [[-200, -200, -120], [-200, -22, 0], [-100, 0, 100], [0, 107, 200], [125, 200, 200]]
-    fuzzy_controller = FuzzyController(False, chromosome)
-    # fuzzy_controller2 = FuzzyController2(False, chromosome)
-    score, perf_data = game.run(scenario=my_test_scenario, controllers = [fuzzy_controller])
-    print(f"Run {seed}")
-    print('Scenario eval time: '+ str(time.perf_counter()-pre))
-    print(score.stop_reason)
-    print('Asteroids hit: ' + str([team.asteroids_hit for team in score.teams]))
-    print('Deaths: ' + str([team.deaths for team in score.teams]))
-    print('Accuracy: ' + str([team.accuracy for team in score.teams]))
-    print('Mean eval time: ' + str([team.mean_eval_time for team in score.teams]))
-    print('Evaluated frames: ' + str([controller.eval_frames for controller in score.final_controllers]))
-    print()
-    return score.teams[0].asteroids_hit
+my_test_scenario = Scenario(name='Test Scenario',
+                            num_asteroids=20,
+                            ship_states=[
+                            {'position': (400, 400), 'angle': 90, 'lives': 3, 'team': 1, 'mines_remaining': 3},
+                            # {'position': (600, 400), 'angle': 90, 'lives': 3, 'team': 2, 'mines_remaining': 3},
+                            ],
+                            map_size=(1000, 800),
+                            seed = random.seed(16),
+                            # num_asteroids=20,
+                            # ship_states=[
+                            # {'position': (400, 400), 'angle': 90, 'lives': 3, 'team': 1, 'mines_remaining': 5},
+                            # {'position': (600, 400), 'angle': 90, 'lives': 3, 'team': 2, 'mines_remaining': 5},
+                            # ],
+                            # map_size=(1000, 800),
+                            # seed = random.seed(1),
+                            time_limit=60,
+                            ammo_limit_multiplier=0,
+                            stop_if_no_ammo=False)
 
-# run_test(0)
-p1_scores = []
-# p2_scores = []
-for i in range(21):
-    p1_score = run_test(i)
-    p1_scores.append(p1_score)
-    # p2_scores.append(p2_score)
-    
+game_settings = {'perf_tracker': True,
+                'graphics_type': GraphicsType.Tkinter,
+                'realtime_multiplier': 1,
+                'graphics_obj': None}
+game = KesslerGame(settings=game_settings) # Use this to visualize the game scenario
+# game = TrainerEnvironment(settings=game_settings) # Use this for max-speed, no-graphics simulation
+pre = time.perf_counter()
+fuzzy_controller = FuzzyController()
+score, perf_data = game.run(scenario=my_test_scenario, controllers = [fuzzy_controller])
+print('Scenario eval time: '+ str(time.perf_counter()-pre))
+print(score.stop_reason)
+print('Asteroids hit: ' + str([team.asteroids_hit for team in score.teams]))
+print('Deaths: ' + str([team.deaths for team in score.teams]))
+print('Accuracy: ' + str([team.accuracy for team in score.teams]))
+print('Mean eval time: ' + str([team.mean_eval_time for team in score.teams]))
+print('Evaluated frames: ' + str([controller.eval_frames for controller in score.final_controllers]))
 
-print(f"Average P1 {sum(p1_scores)/len(p1_scores)}")
-# print(f"Average P2 {sum(p2_scores)/len(p2_scores)}")
