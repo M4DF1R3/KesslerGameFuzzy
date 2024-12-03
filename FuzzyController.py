@@ -142,17 +142,12 @@ class FuzzyController(KesslerController):
         ship_vel = np.array(ship_state["velocity"])
         collision_count = 0
         asteroids = []
-        asteroid_angles = []
-        time_collision = []
         
         # Game boundaries
         game_width = 1000
         game_height = 800
-        closest_asteroid_distance = float('inf')
+        
         for asteroid in game_state["asteroids"]:
-            curr_dist = math.sqrt((ship_state["position"][0] - asteroid["position"][0])**2 + (ship_state["position"][1] - asteroid["position"][1])**2)
-            closest_asteroid_distance = min(closest_asteroid_distance, curr_dist)
-            
             asteroid_pos = np.array(asteroid["position"])
             asteroid_vel = np.array(asteroid["velocity"])
 
@@ -189,17 +184,9 @@ class FuzzyController(KesslerController):
             # Check for collision
             if d_min <= asteroid['radius'] + 20:  # +20 compensates for the size of ship
                 collision_count += 1
-
-                asteroid_angle = np.arctan2(r_wrapped[1], r_wrapped[0])  # Compute the angle
-                asteroid_angle = asteroid_angle * 180 / np.pi
-                if asteroid_angle < 0:
-                    asteroid_angle = 360 + asteroid_angle
-                
                 asteroids.append(asteroid)
-                asteroid_angles.append(asteroid_angle)
-                time_collision.append(t_ca)
                 
-        return asteroids, collision_count, asteroid_angles, time_collision, closest_asteroid_distance
+        return asteroids, collision_count
 
 
     def actions(self, ship_state: Dict, game_state: Dict) -> Tuple[float, float, bool]:
@@ -229,7 +216,7 @@ class FuzzyController(KesslerController):
         ship_pos_y = ship_state["position"][1]       
         closest_asteroid = None
         
-        asteroids, collision_count, asteroid_angles, time_collision, closest_asteroid_distance = self.find_colliding_asteroids(ship_state, game_state)
+        asteroids, collision_count = self.find_colliding_asteroids(ship_state, game_state)
         
         if collision_count == 0 or self.escaping_mine_frames > 0:
             asteroids = game_state["asteroids"]
@@ -330,7 +317,7 @@ class FuzzyController(KesslerController):
 
         if self.mine_cooldown_frames == 0 and deploy_mine_output > 0:
             drop_mine = True
-            self.mine_cooldown_frames = 900  # Cooldown duration (e.g., 90 frames)
+            self.mine_cooldown_frames = 1500  # Cooldown duration (e.g., 90 frames)
             self.escaping_mine_frames = 30  # Escape duration (e.g., 30 frames)
 
         # Scale thrust by 5
@@ -338,6 +325,9 @@ class FuzzyController(KesslerController):
         
         self.eval_frames +=1
         
+        if (bullet_t <= 0.01 and ship_state['lives_remaining'] == 1 or game_state['time_limit']-game_state['time'] <= 3.1):
+            drop_mine = True
+
         #DEBUG
         # print(thrust, bullet_t, shooting_theta, turn_rate, fire)
 
