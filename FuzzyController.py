@@ -14,7 +14,7 @@ from test_controller import TestController
 class FuzzyController(KesslerController):
     def __init__(self):
         self.targeting_control = self.setup_fuzzy_controller()
-        self.escaping_mine_frames = 0  # Tracks the number of frames in escape mode
+        self.escaping_mine_frames = 900  # Tracks the number of frames in escape mode
         self.mine_cooldown_frames = 0  # Tracks cooldown period after dropping a mine
         
     def setup_fuzzy_controller(self):
@@ -277,8 +277,8 @@ class FuzzyController(KesslerController):
                 
         # Calculate the intercept point. The work backwards to find the ship's firing angle my_theta1.
         # Velocities are in m/sec, so bullet_t is in seconds. Add one tik, hardcoded to 1/30 sec.
-        intrcpt_x = closest_asteroid["aster"]["position"][0] + closest_asteroid["aster"]["velocity"][0] * (bullet_t+bullet_t*25)
-        intrcpt_y = closest_asteroid["aster"]["position"][1] + closest_asteroid["aster"]["velocity"][1] * (bullet_t+bullet_t*25)
+        intrcpt_x = closest_asteroid["aster"]["position"][0] + closest_asteroid["aster"]["velocity"][0] * (bullet_t+bullet_t*15)
+        intrcpt_y = closest_asteroid["aster"]["position"][1] + closest_asteroid["aster"]["velocity"][1] * (bullet_t+bullet_t*15)
 
         
         my_theta1 = math.atan2((intrcpt_y - ship_pos_y),(intrcpt_x - ship_pos_x))
@@ -317,7 +317,7 @@ class FuzzyController(KesslerController):
 
         if self.mine_cooldown_frames == 0 and deploy_mine_output > 0:
             drop_mine = True
-            self.mine_cooldown_frames = 1500  # Cooldown duration (e.g., 90 frames)
+            self.mine_cooldown_frames = 600  # Cooldown duration (e.g., 90 frames)
             self.escaping_mine_frames = 30  # Escape duration (e.g., 30 frames)
 
         # Scale thrust by 5
@@ -335,4 +335,4 @@ class FuzzyController(KesslerController):
         
     @property
     def name(self) -> str:
-        return "Fuzzy Controller"
+        return "Group 8"
