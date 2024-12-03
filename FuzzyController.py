@@ -20,10 +20,7 @@ class FuzzyController(KesslerController):
 
         self.targeting_control = self.setup_fuzzy_controller()
         self.escaping_mine_frames = 0  # Tracks the number of frames in escape mode
-        self.escape_heading = None  # Stores the escape direction
         self.mine_cooldown_frames = 0  # Tracks cooldown period after dropping a mine
-
-
         
     def setup_fuzzy_controller(self):
         self.eval_frames = 0 #What is this?
@@ -71,11 +68,16 @@ class FuzzyController(KesslerController):
         ship_thrust['Z'] = fuzz.trimf(ship_thrust.universe, self.chromosome[2])
         ship_thrust['PS'] = fuzz.trimf(ship_thrust.universe, self.chromosome[3])
         ship_thrust['PM'] = fuzz.trimf(ship_thrust.universe, self.chromosome[4])
+        
         # Add asteroid_distance antecedent
         asteroid_distance = ctrl.Antecedent(np.arange(0, 1000, 50), 'asteroid_distance')
         asteroid_distance['Close'] = fuzz.trimf(asteroid_distance.universe, [0, 0, 100])
         asteroid_distance['Medium'] = fuzz.trimf(asteroid_distance.universe, [200, 500, 800])
         asteroid_distance['Far'] = fuzz.trimf(asteroid_distance.universe, [600, 1000, 1000])
+
+        mine_danger = ctrl.Antecedent(np.arange(0, 2, 1), 'mine_danger')
+        mine_danger['Safe'] = fuzz.trimf(mine_danger.universe, [0, 0, 1])
+        mine_danger['Danger'] = fuzz.trimf(mine_danger.universe, [0, 1, 1])
 
         # Add deploy_mine consequent
         deploy_mine = ctrl.Consequent(np.arange(-1, 2, 1), 'deploy_mine')  # -1 -> Hold, +1 -> Deploy
@@ -83,20 +85,20 @@ class FuzzyController(KesslerController):
         deploy_mine['Deploy'] = fuzz.trimf(deploy_mine.universe, [0, 1, 1])
 
         #Declare each fuzzy rule
-        rule1 = ctrl.Rule(bullet_time['L'] & theta_delta['NL'], (ship_turn['NL'], ship_fire['N'], ship_thrust['PM']))
-        rule2 = ctrl.Rule(bullet_time['L'] & theta_delta['NM'], (ship_turn['NM'], ship_fire['N'], ship_thrust['PM']))
-        rule3 = ctrl.Rule(bullet_time['L'] & theta_delta['NS'], (ship_turn['NS'], ship_fire['Y'], ship_thrust['PM']))
+        rule1 = ctrl.Rule(bullet_time['L'] & theta_delta['NL'], (ship_turn['NL'], ship_fire['Y'], ship_thrust['Z']))
+        rule2 = ctrl.Rule(bullet_time['L'] & theta_delta['NM'], (ship_turn['NM'], ship_fire['Y'], ship_thrust['Z']))
+        rule3 = ctrl.Rule(bullet_time['L'] & theta_delta['NS'], (ship_turn['NS'], ship_fire['Y'], ship_thrust['Z']))
         rule4 = ctrl.Rule(bullet_time['L'] & theta_delta['Z'], (ship_turn['Z'], ship_fire['Y'], ship_thrust['Z']))
-        rule5 = ctrl.Rule(bullet_time['L'] & theta_delta['PS'], (ship_turn['PS'], ship_fire['Y'], ship_thrust['PM']))
-        rule6 = ctrl.Rule(bullet_time['L'] & theta_delta['PM'], (ship_turn['PM'], ship_fire['N'], ship_thrust['PM']))
-        rule7 = ctrl.Rule(bullet_time['L'] & theta_delta['PL'], (ship_turn['PL'], ship_fire['N'], ship_thrust['PM']))
-        rule8 = ctrl.Rule(bullet_time['M'] & theta_delta['NL'], (ship_turn['NL'], ship_fire['N'], ship_thrust['PS']))
-        rule9 = ctrl.Rule(bullet_time['M'] & theta_delta['NM'], (ship_turn['NM'], ship_fire['N'], ship_thrust['PS']))
+        rule5 = ctrl.Rule(bullet_time['L'] & theta_delta['PS'], (ship_turn['PS'], ship_fire['Y'], ship_thrust['Z']))
+        rule6 = ctrl.Rule(bullet_time['L'] & theta_delta['PM'], (ship_turn['PM'], ship_fire['Y'], ship_thrust['Z']))
+        rule7 = ctrl.Rule(bullet_time['L'] & theta_delta['PL'], (ship_turn['PL'], ship_fire['Y'], ship_thrust['Z']))
+        rule8 = ctrl.Rule(bullet_time['M'] & theta_delta['NL'], (ship_turn['NL'], ship_fire['Y'], ship_thrust['PS']))
+        rule9 = ctrl.Rule(bullet_time['M'] & theta_delta['NM'], (ship_turn['NM'], ship_fire['Y'], ship_thrust['PS']))
         rule10 = ctrl.Rule(bullet_time['M'] & theta_delta['NS'], (ship_turn['NS'], ship_fire['Y'], ship_thrust['PS']))
         rule11 = ctrl.Rule(bullet_time['M'] & theta_delta['Z'], (ship_turn['Z'], ship_fire['Y'], ship_thrust['NS']))
         rule12 = ctrl.Rule(bullet_time['M'] & theta_delta['PS'], (ship_turn['PS'], ship_fire['Y'], ship_thrust['PS']))
-        rule13 = ctrl.Rule(bullet_time['M'] & theta_delta['PM'], (ship_turn['PM'], ship_fire['N'], ship_thrust['PS']))
-        rule14 = ctrl.Rule(bullet_time['M'] & theta_delta['PL'], (ship_turn['PL'], ship_fire['N'], ship_thrust['PS']))
+        rule13 = ctrl.Rule(bullet_time['M'] & theta_delta['PM'], (ship_turn['PM'], ship_fire['Y'], ship_thrust['PS']))
+        rule14 = ctrl.Rule(bullet_time['M'] & theta_delta['PL'], (ship_turn['PL'], ship_fire['Y'], ship_thrust['PS']))
         rule15 = ctrl.Rule(bullet_time['S'] & theta_delta['NL'], (ship_turn['NL'], ship_fire['Y'], ship_thrust['Z']))
         rule16 = ctrl.Rule(bullet_time['S'] & theta_delta['NM'], (ship_turn['NM'], ship_fire['Y'], ship_thrust['NS']))
         rule17 = ctrl.Rule(bullet_time['S'] & theta_delta['NS'], (ship_turn['NS'], ship_fire['Y'], ship_thrust['NM']))
@@ -105,57 +107,102 @@ class FuzzyController(KesslerController):
         rule20 = ctrl.Rule(bullet_time['S'] & theta_delta['PM'], (ship_turn['PM'], ship_fire['Y'], ship_thrust['NS']))
         rule21 = ctrl.Rule(bullet_time['S'] & theta_delta['PL'], (ship_turn['PL'], ship_fire['Y'], ship_thrust['Z']))
         # Rules for deploying mines
-        rule_mine_close = ctrl.Rule(asteroid_distance['Close'] & ship_thrust['Z'], deploy_mine['Deploy'])
-        rule_mine_medium = ctrl.Rule(asteroid_distance['Medium'] & bullet_time['L'], deploy_mine['Deploy'])
+        rule_mine_close = ctrl.Rule(asteroid_distance['Close'] & bullet_time['S'], deploy_mine['Deploy'])
+        rule_mine_medium = ctrl.Rule(asteroid_distance['Medium'] & bullet_time['L'], deploy_mine['Hold'])
         rule_mine_far = ctrl.Rule(asteroid_distance['Far'], deploy_mine['Hold'])  # Default: Don't deploy
+        rule_22 = ctrl.Rule(mine_danger['Safe'], ship_thrust['Z'])
+        rule_23 = ctrl.Rule(mine_danger['Danger'], ship_thrust['NM'])
 
-
-             
         #DEBUG
         #bullet_time.view()
         #theta_delta.view()
         #ship_turn.view()
         #ship_fire.view()
      
-        
         # Declare the fuzzy controller, add the rules 
         # This is an instance variable, and thus available for other methods in the same object. See notes.                         
-        # self.targeting_control = ctrl.ControlSystem([rule1, rule2, rule3, rule4, rule5, rule6, rule7, rule8, rule9, rule10, rule11, rule12, rule13, rule14, rule15])
              
         targeting_control = ctrl.ControlSystem([
         rule1, rule2, rule3, rule4, rule5, rule6, rule7, rule8, rule9,
         rule10, rule11, rule12, rule13, rule14, rule15, rule16, rule17,
-        rule18, rule19, rule20, rule21, rule_mine_close, rule_mine_medium, rule_mine_far
-         ])
-        targeting_control.addrule(rule1)
-        targeting_control.addrule(rule2)
-        targeting_control.addrule(rule3)
-        # targeting_control.addrule(rule4)
-        targeting_control.addrule(rule5)
-        targeting_control.addrule(rule6)
-        targeting_control.addrule(rule7)
-        targeting_control.addrule(rule8)
-        targeting_control.addrule(rule9)
-        targeting_control.addrule(rule10)
-        # targeting_control.addrule(rule11)
-        targeting_control.addrule(rule12)
-        targeting_control.addrule(rule13)
-        targeting_control.addrule(rule14)
-        targeting_control.addrule(rule15)
-        targeting_control.addrule(rule16)
-        targeting_control.addrule(rule17)
-        # targeting_control.addrule(rule18)
-        targeting_control.addrule(rule19)
-        targeting_control.addrule(rule20)
-        targeting_control.addrule(rule21)
-        # Add deploy_mine rules to the control system
-        targeting_control.addrule(rule_mine_close)
-        targeting_control.addrule(rule_mine_medium)
-        targeting_control.addrule(rule_mine_far)
-
-
-
+        rule18, rule19, rule20, rule21, rule_mine_close, rule_mine_medium, rule_mine_far,
+        rule_22, rule_23
+        ])
+        
         return targeting_control
+
+    def get_mines(self, ship_state, game_state):
+        for m in game_state["mines"]:
+            ship_mine_dist = math.sqrt((ship_state["position"][0] - m["position"][0])**2 + (ship_state["position"][1] - m["position"][1])**2)
+            if (ship_mine_dist < 130):
+                return 1
+        return 0
+
+    def find_colliding_asteroids(self, ship_state, game_state):
+        ship_pos = np.array(ship_state["position"])
+        ship_vel = np.array(ship_state["velocity"])
+        collision_count = 0
+        asteroids = []
+        asteroid_angles = []
+        time_collision = []
+        
+        # Game boundaries
+        game_width = 1000
+        game_height = 800
+        closest_asteroid_distance = float('inf')
+        for asteroid in game_state["asteroids"]:
+            curr_dist = math.sqrt((ship_state["position"][0] - asteroid["position"][0])**2 + (ship_state["position"][1] - asteroid["position"][1])**2)
+            closest_asteroid_distance = min(closest_asteroid_distance, curr_dist)
+            
+            asteroid_pos = np.array(asteroid["position"])
+            asteroid_vel = np.array(asteroid["velocity"])
+
+            # Relative position and velocity
+            r = asteroid_pos - ship_pos
+            v = asteroid_vel - ship_vel
+
+            # Adjust for wrapping boundaries
+            r_wrapped = r.copy()
+            if r[0] > game_width / 2:
+                r_wrapped[0] -= game_width
+            elif r[0] < -game_width / 2:
+                r_wrapped[0] += game_width
+
+            if r[1] > game_height / 2:
+                r_wrapped[1] -= game_height
+            elif r[1] < -game_height / 2:
+                r_wrapped[1] += game_height
+
+            # Time of closest approach
+            v_norm_sq = np.dot(v, v)
+            if v_norm_sq == 0:
+                # Static relative motion thus skip this asteroid
+                continue
+            t_ca = -np.dot(r_wrapped, v) / v_norm_sq
+
+            if t_ca < 0:
+                # Asteroid is moving away
+                continue
+
+            # Minimum distance
+            d_min = np.linalg.norm(r_wrapped + t_ca * v)
+
+            # Check for collision
+            if d_min <= asteroid['radius'] + 20:  # +20 compensates for the size of ship
+                collision_count += 1
+
+                asteroid_angle = np.arctan2(r_wrapped[1], r_wrapped[0])  # Compute the angle
+                asteroid_angle = asteroid_angle * 180 / np.pi
+                if asteroid_angle < 0:
+                    asteroid_angle = 360 + asteroid_angle
+                elif asteroid_angle > 360:
+                    print("Error")
+                    # asteroid_angle = asteroid_angle % 360
+                asteroids.append(asteroid)
+                asteroid_angles.append(asteroid_angle)
+                time_collision.append(t_ca)
+                
+        return asteroids, collision_count, asteroid_angles, time_collision, closest_asteroid_distance
 
 
     def actions(self, ship_state: Dict, game_state: Dict) -> Tuple[float, float, bool]:
@@ -184,7 +231,13 @@ class FuzzyController(KesslerController):
         ship_pos_y = ship_state["position"][1]       
         closest_asteroid = None
         
-        for a in game_state["asteroids"]:
+        asteroids, collision_count, asteroid_angles, time_collision, closest_asteroid_distance = self.find_colliding_asteroids(ship_state, game_state)
+        print(collision_count, time_collision)
+        if collision_count == 0 or self.escaping_mine_frames > 0:
+            asteroids = game_state["asteroids"]
+
+
+        for a in asteroids:
             #Loop through all asteroids, find minimum Eudlidean distance
             curr_dist = math.sqrt((ship_pos_x - a["position"][0])**2 + (ship_pos_y - a["position"][1])**2)
             if closest_asteroid is None :
@@ -254,13 +307,15 @@ class FuzzyController(KesslerController):
         # Wrap all angles to (-pi, pi)
         shooting_theta = (shooting_theta + math.pi) % (2 * math.pi) - math.pi
         
+        mine_danger = self.get_mines(ship_state, game_state)
         # Pass the inputs to the rulebase and fire it
         shooting = ctrl.ControlSystemSimulation(self.targeting_control,flush_after_run=1)
         
         shooting.input['bullet_time'] = bullet_t
         shooting.input['theta_delta'] = shooting_theta
         shooting.input['asteroid_distance'] = closest_asteroid["dist"]
-
+        shooting.input['mine_danger'] = mine_danger
+        
         shooting.compute()
         
         # Get the defuzzified outputs
@@ -278,28 +333,18 @@ class FuzzyController(KesslerController):
             fire = False
         drop_mine = False
 
-
         if self.mine_cooldown_frames == 0 and deploy_mine_output > 0:
             drop_mine = True
-            self.mine_cooldown_frames = 90  # Cooldown duration (e.g., 90 frames)
+            self.mine_cooldown_frames = 900  # Cooldown duration (e.g., 90 frames)
             self.escaping_mine_frames = 30  # Escape duration (e.g., 30 frames)
-            self.escape_heading = (ship_state["heading"] + 180) % 360  # Escape direction (opposite)
 
-        if self.escaping_mine_frames > 0:
-            # Apply high thrust in escape direction
-            escape_rad = math.radians(self.escape_heading)
-            thrust = 200  # High thrust for escaping
-            print(f"Escaping! Heading: {self.escape_heading}, Thrust: {thrust}")
-        else:
-            # Normal thrust logic
-            thrust = 4 * shooting.output['ship_thrust']
-
+        # Scale thrust by 5
+        thrust = 5 * shooting.output['ship_thrust']
         
         self.eval_frames +=1
         
         #DEBUG
         # print(thrust, bullet_t, shooting_theta, turn_rate, fire)
-        print(f"Returning -> Thrust: {thrust}, Turn Rate: {turn_rate}, Fire: {fire}, Drop Mine: {drop_mine}")
 
         return thrust, turn_rate, fire, drop_mine
         
