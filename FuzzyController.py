@@ -14,8 +14,8 @@ from test_controller import TestController
 class FuzzyController(KesslerController):
     def __init__(self):
         self.targeting_control = self.setup_fuzzy_controller()
-        self.escaping_mine_frames = 900  # Tracks the number of frames in escape mode
-        self.mine_cooldown_frames = 0  # Tracks cooldown period after dropping a mine
+        self.escaping_mine_frames = 0  # Tracks the number of frames in escape mode
+        self.mine_cooldown_frames = 900  # Tracks cooldown period after dropping a mine
         
     def setup_fuzzy_controller(self):
         """
