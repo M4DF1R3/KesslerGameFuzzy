@@ -26,7 +26,7 @@ class FuzzyController(KesslerController):
 
         # self.targeting_control is the targeting rulebase, which is static in this controller.      
         # Declare variables
-        bullet_time = ctrl.Antecedent(np.arange(0,1.0,0.002), 'bullet_time')
+        bullet_time = ctrl.Antecedent(np.arange(0,1.0,0.01), 'bullet_time')
         theta_delta = ctrl.Antecedent(np.arange(-1*math.pi/30,math.pi/30,0.1), 'theta_delta') # Radians due to Python
         ship_turn = ctrl.Consequent(np.arange(-180,180,1), 'ship_turn') # Degrees due to Kessler
         ship_fire = ctrl.Consequent(np.arange(-1,1,0.1), 'ship_fire')
@@ -277,8 +277,8 @@ class FuzzyController(KesslerController):
                 
         # Calculate the intercept point. The work backwards to find the ship's firing angle my_theta1.
         # Velocities are in m/sec, so bullet_t is in seconds. Add one tik, hardcoded to 1/30 sec.
-        intrcpt_x = closest_asteroid["aster"]["position"][0] + closest_asteroid["aster"]["velocity"][0] * (bullet_t+bullet_t*15)
-        intrcpt_y = closest_asteroid["aster"]["position"][1] + closest_asteroid["aster"]["velocity"][1] * (bullet_t+bullet_t*15)
+        intrcpt_x = closest_asteroid["aster"]["position"][0] + closest_asteroid["aster"]["velocity"][0] * (bullet_t+bullet_t*10)
+        intrcpt_y = closest_asteroid["aster"]["position"][1] + closest_asteroid["aster"]["velocity"][1] * (bullet_t+bullet_t*10)
 
         
         my_theta1 = math.atan2((intrcpt_y - ship_pos_y),(intrcpt_x - ship_pos_x))
@@ -325,7 +325,7 @@ class FuzzyController(KesslerController):
         
         self.eval_frames +=1
         
-        if (bullet_t <= 0.01 and ship_state['lives_remaining'] == 1 or game_state['time_limit']-game_state['time'] <= 3.1):
+        if (bullet_t <= 0.001 and ship_state['lives_remaining'] == 1 or game_state['time_limit']-game_state['time'] <= 3.1):
             drop_mine = True
 
         #DEBUG
