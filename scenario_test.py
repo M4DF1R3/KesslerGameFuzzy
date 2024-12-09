@@ -9,7 +9,7 @@ from test_controller import TestController
 from scott_dick_controller import ScottDickController
 from graphics_both import GraphicsBoth
 from FuzzyController import FuzzyController
-from FuzzyController2 import FuzzyController2
+# from FuzzyController2 import FuzzyController2
 import random
 def run_test(seed):
     my_test_scenario = Scenario(name='Test Scenario',
@@ -19,7 +19,7 @@ def run_test(seed):
                                 # {'position': (600, 400), 'angle': 90, 'lives': 3, 'team': 2, 'mines_remaining': 3},
                                 ],
                                 map_size=(1000, 800),
-                                seed = random.seed(16),
+                                seed = random.seed(17),
                                 # num_asteroids=20,
                                 # ship_states=[
                                 # {'position': (400, 400), 'angle': 90, 'lives': 3, 'team': 1, 'mines_remaining': 5},
@@ -38,8 +38,9 @@ def run_test(seed):
     game = KesslerGame(settings=game_settings) # Use this to visualize the game scenario
     # game = TrainerEnvironment(settings=game_settings) # Use this for max-speed, no-graphics simulation
     pre = time.perf_counter()
-    chromosome = [[-200, -200, -120], [-200, -22, 0], [-100, 0, 100], [0, 107, 200], [125, 200, 200]]
-    fuzzy_controller = FuzzyController(False, chromosome)
+    # chromosome = [[-200, -200, -120], [-200, -22, 0], [-100, 0, 100], [0, 107, 200], [125, 200, 200]]
+    chromosome = [-200, -200, -120, -200, -22, 0, -100, 0, 100, 0, 107, 200, 125, 200, 200]
+    fuzzy_controller = FuzzyController(True, chromosome)
     # fuzzy_controller2 = FuzzyController2(False, chromosome)
     score, perf_data = game.run(scenario=my_test_scenario, controllers = [fuzzy_controller])
     print(f"Run {seed}")
@@ -53,14 +54,15 @@ def run_test(seed):
     print()
     return score.teams[0].asteroids_hit
 
-# run_test(0)
-p1_scores = []
-# p2_scores = []
-for i in range(21):
-    p1_score = run_test(i)
-    p1_scores.append(p1_score)
-    # p2_scores.append(p2_score)
-    
+if __name__ == "__main__":
+    # run_test(0)
+    p1_scores = []
+    # p2_scores = []
+    for i in range(21):
+        p1_score = run_test(i)
+        p1_scores.append(p1_score)
+        # p2_scores.append(p2_score)
+        
 
-print(f"Average P1 {sum(p1_scores)/len(p1_scores)}")
-# print(f"Average P2 {sum(p2_scores)/len(p2_scores)}")
+    print(f"Average P1 {sum(p1_scores)/len(p1_scores)}")
+    # print(f"Average P2 {sum(p2_scores)/len(p2_scores)}")
