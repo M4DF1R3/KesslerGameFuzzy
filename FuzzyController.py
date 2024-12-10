@@ -8,7 +8,9 @@ import numpy as np
 import pygad
 from test_controller import TestController
 
-BEST_CHROMOSOME = [-200, -200, -120, -200, -22, 0, -100, 0, 100, 0, 107, 200, 125, 200, 200]
+BEST_CHROMOSOME = [-200, -200, -106, -200, -26, 0, -100, 28, 100, 0, 106, 200,
+    139, 200, 200, 0, 0, 0.058, 0, 0.058, 0.1]
+
 def generate_chromosome():
     """
     Generate a chromosome representing the thrust membership functions for ship_thrust.
@@ -29,8 +31,12 @@ def generate_chromosome():
     thrust_z = [-100, thrust_z_val, 100]
     thrust_ps = [0, thrust_ps_val, 200]
     thrust_pm = [thrust_pm_val, 200, 200]
+    
+    bullet_time_1 = np.random.uniform(0.04, 0.06)
+    bullet_time_s = [0, 0, bullet_time_1]
+    bullet_time_m = [0, bullet_time_1, 0.1]
 
-    chromosome = thrust_nm + thrust_ns + thrust_z + thrust_ps + thrust_pm
+    chromosome = thrust_nm + thrust_ns + thrust_z + thrust_ps + thrust_pm + bullet_time_s + bullet_time_m
     return chromosome
 
 def fitness(ga_instance, solution, solution_idx):
@@ -58,7 +64,7 @@ def fitness(ga_instance, solution, solution_idx):
                      'graphics_obj': None}
     game = TrainerEnvironment(settings=game_settings)
     _ = time.perf_counter()
-    fuzzy_controller = FuzzyController(run_genetics=False, chromosome=chromosome)
+    fuzzy_controller = FuzzyController(run_genetics=True, chromosome=chromosome)
     score, _ = game.run(scenario=my_test_scenario, controllers=[TestController(), fuzzy_controller])
 
     # Fitness: maximize asteroids hit, minimize deaths
@@ -70,7 +76,7 @@ def get_best_chromosome():
     """
     num_genes = 15
     sol_per_pop = 5
-    num_generations = 5
+    num_generations = 3
     num_parents_mating = 2
 
     # Generate initial population
@@ -100,8 +106,9 @@ def get_best_chromosome():
     print("Best solution fitness:", solution_fitness)
     print("Best solution:", solution)
     return solution
+
 class FuzzyController(KesslerController):
-    def __init__(self, run_genetics, chromosome=None):
+    def __init__(self, run_genetics=False, chromosome=None):
         # BEST_CHROMOSOME is defined at top of file
         # To find best chromosome, pass in run_genetics=True and chromosome=None
         # Or to use a specific chromosome, pass in run_genetics=False and chromosome=CHROMOSOME
@@ -128,22 +135,18 @@ class FuzzyController(KesslerController):
         Z =  self.chromosome[6:9]
         PS = self.chromosome[9:12]
         PM = self.chromosome[12:15]
-
-        # Sort each triple before applying trimf
-        NM = np.sort(NM)
-        NS = np.sort(NS)
-        Z = np.sort(Z)
-        PS = np.sort(PS)
-        PM = np.sort(PM)
-
+        
+        bullet_time_s = self.chromosome[15:18]
+        bullet_time_m = self.chromosome[18:21]
+  
         bullet_time = ctrl.Antecedent(np.arange(0,1.0,0.002), 'bullet_time')
         theta_delta = ctrl.Antecedent(np.arange(-1*math.pi/30,math.pi/30,0.1), 'theta_delta')
         ship_turn = ctrl.Consequent(np.arange(-180,180,1), 'ship_turn')
         ship_fire = ctrl.Consequent(np.arange(-1,1,0.1), 'ship_fire')
         ship_thrust = ctrl.Consequent(np.arange(-200, 200, 25), 'ship_thrust')
 
-        bullet_time['S'] = fuzz.trimf(bullet_time.universe,[0,0,0.05])
-        bullet_time['M'] = fuzz.trimf(bullet_time.universe,[0,0.05,0.1])
+        bullet_time['S'] = fuzz.trimf(bullet_time.universe,bullet_time_s)
+        bullet_time['M'] = fuzz.trimf(bullet_time.universe,bullet_time_m)
         bullet_time['L'] = fuzz.smf(bullet_time.universe,0.0,0.1)
 
         theta_delta['NL'] = fuzz.zmf(theta_delta.universe, -1*math.pi/30,-2*math.pi/90)
