@@ -8,7 +8,7 @@ import numpy as np
 import pygad
 from test_controller import TestController
 
-
+BEST_CHROMOSOME = [-200, -200, -120, -200, -22, 0, -100, 0, 100, 0, 107, 200, 125, 200, 200]
 def generate_chromosome():
     """
     Generate a chromosome representing the thrust membership functions for ship_thrust.
@@ -64,14 +64,6 @@ def fitness(ga_instance, solution, solution_idx):
     # Fitness: maximize asteroids hit, minimize deaths
     return score.teams[1].asteroids_hit - 50*score.teams[1].deaths
 
-# def fuzzy_pygad_fitness_func(ga_instance, solution, solution_idx):
-#     """
-#     pygad expects a fitness function: solution (1D array), solution_idx (int).
-#     We can call our fitness function directly.
-#     """
-#     print("pygad_fitness_func arguments:", pygad_fitness_func.__code__.co_argcount)
-#     return fitness(solution)
-
 def get_best_chromosome():
     """
     Use pygad to evolve a population of chromosomes and find the best one.
@@ -109,14 +101,17 @@ def get_best_chromosome():
     print("Best solution:", solution)
     return solution
 class FuzzyController(KesslerController):
-    def __init__(self, run_genetics, chromosome):
+    def __init__(self, run_genetics, chromosome=None):
+        # BEST_CHROMOSOME is defined at top of file
+        # To find best chromosome, pass in run_genetics=True and chromosome=None
+        # Or to use a specific chromosome, pass in run_genetics=False and chromosome=CHROMOSOME
         if run_genetics:
             if chromosome is None:
                 self.chromosome = get_best_chromosome()
             else:
                 self.chromosome = chromosome
         else:
-            self.chromosome = chromosome # Pass in chromosome
+            self.chromosome = BEST_CHROMOSOME # Pass in chromosome
 
         self.targeting_control = self.setup_fuzzy_controller()
         self.escaping_mine_frames = 0  # Tracks the number of frames in escape mode
@@ -128,11 +123,6 @@ class FuzzyController(KesslerController):
         # self.chromosome is a 1D array of length 15
         # Extract sets for ship_thrust
         # NM: [0:3], NS: [3:6], Z: [6:9], PS: [9:12], PM: [12:15]
-        # NM = self.chromosome[0:3]
-        # NS = self.chromosome[3:6]
-        # Z =  self.chromosome[6:9]
-        # PS = self.chromosome[9:12]
-        # PM = self.chromosome[12:15]
         NM = self.chromosome[0:3]
         NS = self.chromosome[3:6]
         Z =  self.chromosome[6:9]
@@ -237,7 +227,7 @@ class FuzzyController(KesslerController):
     def get_mines(self, ship_state, game_state):
         for m in game_state["mines"]:
             ship_mine_dist = math.sqrt((ship_state["position"][0] - m["position"][0])**2 + (ship_state["position"][1] - m["position"][1])**2)
-            if (ship_mine_dist < 130):
+            if (ship_mine_dist <= 175):
                 return 1
         return 0
 
@@ -298,9 +288,6 @@ class FuzzyController(KesslerController):
                 asteroid_angle = asteroid_angle * 180 / np.pi
                 if asteroid_angle < 0:
                     asteroid_angle = 360 + asteroid_angle
-                elif asteroid_angle > 360:
-                    print("Error")
-                    # asteroid_angle = asteroid_angle % 360
                 asteroids.append(asteroid)
                 asteroid_angles.append(asteroid_angle)
                 time_collision.append(t_ca)
@@ -335,7 +322,7 @@ class FuzzyController(KesslerController):
         closest_asteroid = None
         
         asteroids, collision_count, asteroid_angles, time_collision, closest_asteroid_distance = self.find_colliding_asteroids(ship_state, game_state)
-        print(collision_count, time_collision)
+
         if collision_count == 0 or self.escaping_mine_frames > 0:
             asteroids = game_state["asteroids"]
 
