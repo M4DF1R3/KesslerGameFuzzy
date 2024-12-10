@@ -5,41 +5,147 @@ import skfuzzy as fuzz
 from skfuzzy import control as ctrl
 import math
 import numpy as np
-from EasyGA import *
+import pygad
 from test_controller import TestController
 
+BEST_CHROMOSOME = [-200, -200, -120, -200, -22, 0, -100, 0, 100, 0, 107, 200, 125, 200, 200]
+def generate_chromosome():
+    """
+    Generate a chromosome representing the thrust membership functions for ship_thrust.
+    Each membership function is represented by 3 values (start, mid, end).
+    We have 5 sets: NM, NS, Z, PS, PM.
+    That totals 5*3 = 15 genes.
+
+    After generating these arrays, we'll flatten them into a 1D list of length 15.
+    """
+    thrust_nm_val = np.random.randint(-150, -99)
+    thrust_ns_val = np.random.randint(-50, 1)
+    thrust_z_val = np.random.randint(-50, 51)
+    thrust_ps_val = np.random.randint(50, 151)
+    thrust_pm_val = np.random.randint(100, 151)
+
+    thrust_nm = [-200, -200, thrust_nm_val]
+    thrust_ns = [-200, thrust_ns_val, 0]
+    thrust_z = [-100, thrust_z_val, 100]
+    thrust_ps = [0, thrust_ps_val, 200]
+    thrust_pm = [thrust_pm_val, 200, 200]
+
+    chromosome = thrust_nm + thrust_ns + thrust_z + thrust_ps + thrust_pm
+    return chromosome
+
+def fitness(ga_instance, solution, solution_idx):
+    """
+    Runs the Kessler Game scenario using the given chromosome for the FuzzyController,
+    and returns a fitness value. The fitness is defined as:
+    score.teams[1].asteroids_hit - 50*score.teams[1].deaths
+
+    We want to maximize this fitness. Higher is better.
+    """
+    chromosome = solution
+    my_test_scenario = Scenario(name='Test Scenario',
+                        num_asteroids=10,
+                        ship_states=[
+                        {'position': (400, 400), 'angle': 90, 'lives': 3, 'team': 1},
+                        {'position': (600, 400), 'angle': 90, 'lives': 3, 'team': 2},
+                        ],
+                        map_size=(1000, 800),
+                        time_limit=60,
+                        ammo_limit_multiplier=0,
+                        stop_if_no_ammo=False)
+    game_settings = {'perf_tracker': True,
+                     'graphics_type': GraphicsType.Tkinter,
+                     'realtime_multiplier': 1,
+                     'graphics_obj': None}
+    game = TrainerEnvironment(settings=game_settings)
+    _ = time.perf_counter()
+    fuzzy_controller = FuzzyController(run_genetics=False, chromosome=chromosome)
+    score, _ = game.run(scenario=my_test_scenario, controllers=[TestController(), fuzzy_controller])
+
+    # Fitness: maximize asteroids hit, minimize deaths
+    return score.teams[1].asteroids_hit - 50*score.teams[1].deaths
+
+def get_best_chromosome():
+    """
+    Use pygad to evolve a population of chromosomes and find the best one.
+    """
+    num_genes = 15
+    sol_per_pop = 5
+    num_generations = 5
+    num_parents_mating = 2
+
+    # Generate initial population
+    initial_population = []
+    for _ in range(sol_per_pop):
+        c = generate_chromosome() # Returns a list of length 15
+        initial_population.append(c)
+    initial_population = np.array(initial_population)
+
+    ga_instance = pygad.GA(
+        fitness_func=fitness,
+        sol_per_pop=sol_per_pop,
+        num_genes=num_genes,
+        initial_population=initial_population,
+        num_generations=num_generations,
+        num_parents_mating=num_parents_mating,
+        mutation_probability=0.1,
+        crossover_probability=0.8,
+        parent_selection_type="sss", # steady-state selection
+        crossover_type="single_point",
+        mutation_type="random",
+        keep_parents=1
+    )
+
+    ga_instance.run()
+    solution, solution_fitness, solution_idx = ga_instance.best_solution()
+    print("Best solution fitness:", solution_fitness)
+    print("Best solution:", solution)
+    return solution
 class FuzzyController(KesslerController):
-    def __init__(self, run_genetics, chromosome):
+    def __init__(self, run_genetics, chromosome=None):
+        # BEST_CHROMOSOME is defined at top of file
+        # To find best chromosome, pass in run_genetics=True and chromosome=None
+        # Or to use a specific chromosome, pass in run_genetics=False and chromosome=CHROMOSOME
         if run_genetics:
             if chromosome is None:
-                self.chromosome = get_best_chromosome().gene_value_list[0]
+                self.chromosome = get_best_chromosome()
             else:
-                self.chromosome = chromosome.gene_value_list[0]
+                self.chromosome = chromosome
         else:
-            self.chromosome = chromosome # Pass in chromosome
+            self.chromosome = BEST_CHROMOSOME # Pass in chromosome
 
         self.targeting_control = self.setup_fuzzy_controller()
         self.escaping_mine_frames = 0  # Tracks the number of frames in escape mode
         self.mine_cooldown_frames = 0  # Tracks cooldown period after dropping a mine
         
     def setup_fuzzy_controller(self):
-        self.eval_frames = 0 #What is this?
+        self.eval_frames = 0
 
-        # self.targeting_control is the targeting rulebase, which is static in this controller.      
-        # Declare variables
+        # self.chromosome is a 1D array of length 15
+        # Extract sets for ship_thrust
+        # NM: [0:3], NS: [3:6], Z: [6:9], PS: [9:12], PM: [12:15]
+        NM = self.chromosome[0:3]
+        NS = self.chromosome[3:6]
+        Z =  self.chromosome[6:9]
+        PS = self.chromosome[9:12]
+        PM = self.chromosome[12:15]
+
+        # Sort each triple before applying trimf
+        NM = np.sort(NM)
+        NS = np.sort(NS)
+        Z = np.sort(Z)
+        PS = np.sort(PS)
+        PM = np.sort(PM)
+
         bullet_time = ctrl.Antecedent(np.arange(0,1.0,0.002), 'bullet_time')
-        theta_delta = ctrl.Antecedent(np.arange(-1*math.pi/30,math.pi/30,0.1), 'theta_delta') # Radians due to Python
-        ship_turn = ctrl.Consequent(np.arange(-180,180,1), 'ship_turn') # Degrees due to Kessler
+        theta_delta = ctrl.Antecedent(np.arange(-1*math.pi/30,math.pi/30,0.1), 'theta_delta')
+        ship_turn = ctrl.Consequent(np.arange(-180,180,1), 'ship_turn')
         ship_fire = ctrl.Consequent(np.arange(-1,1,0.1), 'ship_fire')
         ship_thrust = ctrl.Consequent(np.arange(-200, 200, 25), 'ship_thrust')
-        
-        #Declare fuzzy sets for bullet_time (how long it takes for the bullet to reach the intercept point)
+
         bullet_time['S'] = fuzz.trimf(bullet_time.universe,[0,0,0.05])
-        bullet_time['M'] = fuzz.trimf(bullet_time.universe, [0,0.05,0.1])
+        bullet_time['M'] = fuzz.trimf(bullet_time.universe,[0,0.05,0.1])
         bullet_time['L'] = fuzz.smf(bullet_time.universe,0.0,0.1)
-        
-        # Declare fuzzy sets for theta_delta (degrees of turn needed to reach the calculated firing angle)
-        # Hard-coded for a game step of 1/30 seconds
+
         theta_delta['NL'] = fuzz.zmf(theta_delta.universe, -1*math.pi/30,-2*math.pi/90)
         theta_delta['NM'] = fuzz.trimf(theta_delta.universe, [-1*math.pi/30, -2*math.pi/90, -1*math.pi/90])
         theta_delta['NS'] = fuzz.trimf(theta_delta.universe, [-2*math.pi/90,-1*math.pi/90,math.pi/90])
@@ -47,9 +153,7 @@ class FuzzyController(KesslerController):
         theta_delta['PS'] = fuzz.trimf(theta_delta.universe, [-1*math.pi/90,math.pi/90,2*math.pi/90])
         theta_delta['PM'] = fuzz.trimf(theta_delta.universe, [math.pi/90,2*math.pi/90, math.pi/30])
         theta_delta['PL'] = fuzz.smf(theta_delta.universe,2*math.pi/90,math.pi/30)
-        
-        # Declare fuzzy sets for the ship_turn consequent; this will be returned as turn_rate.
-        # Hard-coded for a game step of 1/30 seconds
+
         ship_turn['NL'] = fuzz.trimf(ship_turn.universe, [-180,-180,-120])
         ship_turn['NM'] = fuzz.trimf(ship_turn.universe, [-180,-120,-60])
         ship_turn['NS'] = fuzz.trimf(ship_turn.universe, [-120,-60,60])
@@ -57,19 +161,17 @@ class FuzzyController(KesslerController):
         ship_turn['PS'] = fuzz.trimf(ship_turn.universe, [-60,60,120])
         ship_turn['PM'] = fuzz.trimf(ship_turn.universe, [60,120,180])
         ship_turn['PL'] = fuzz.trimf(ship_turn.universe, [120,180,180])
-        
-        #Declare singleton fuzzy sets for the ship_fire consequent; -1 -> don't fire, +1 -> fire; this will be  thresholded
-        #   and returned as the boolean 'fire'
+
         ship_fire['N'] = fuzz.trimf(ship_fire.universe, [-1,-1,0.0])
         ship_fire['Y'] = fuzz.trimf(ship_fire.universe, [0.0,1,1])
-        
-        ship_thrust['NM'] = fuzz.trimf(ship_thrust.universe, self.chromosome[0])
-        ship_thrust['NS'] = fuzz.trimf(ship_thrust.universe, self.chromosome[1])
-        ship_thrust['Z'] = fuzz.trimf(ship_thrust.universe, self.chromosome[2])
-        ship_thrust['PS'] = fuzz.trimf(ship_thrust.universe, self.chromosome[3])
-        ship_thrust['PM'] = fuzz.trimf(ship_thrust.universe, self.chromosome[4])
-        
-        # Add asteroid_distance antecedent
+
+        # Use the chromosome segments for ship_thrust
+        ship_thrust['NM'] = fuzz.trimf(ship_thrust.universe, NM)
+        ship_thrust['NS'] = fuzz.trimf(ship_thrust.universe, NS)
+        ship_thrust['Z'] = fuzz.trimf(ship_thrust.universe, Z)
+        ship_thrust['PS'] = fuzz.trimf(ship_thrust.universe, PS)
+        ship_thrust['PM'] = fuzz.trimf(ship_thrust.universe, PM)
+
         asteroid_distance = ctrl.Antecedent(np.arange(0, 1000, 50), 'asteroid_distance')
         asteroid_distance['Close'] = fuzz.trimf(asteroid_distance.universe, [0, 0, 100])
         asteroid_distance['Medium'] = fuzz.trimf(asteroid_distance.universe, [200, 500, 800])
@@ -79,12 +181,10 @@ class FuzzyController(KesslerController):
         mine_danger['Safe'] = fuzz.trimf(mine_danger.universe, [0, 0, 1])
         mine_danger['Danger'] = fuzz.trimf(mine_danger.universe, [0, 1, 1])
 
-        # Add deploy_mine consequent
-        deploy_mine = ctrl.Consequent(np.arange(-1, 2, 1), 'deploy_mine')  # -1 -> Hold, +1 -> Deploy
+        deploy_mine = ctrl.Consequent(np.arange(-1, 2, 1), 'deploy_mine')
         deploy_mine['Hold'] = fuzz.trimf(deploy_mine.universe, [-1, -1, 0])
         deploy_mine['Deploy'] = fuzz.trimf(deploy_mine.universe, [0, 1, 1])
 
-        #Declare each fuzzy rule
         rule1 = ctrl.Rule(bullet_time['L'] & theta_delta['NL'], (ship_turn['NL'], ship_fire['Y'], ship_thrust['Z']))
         rule2 = ctrl.Rule(bullet_time['L'] & theta_delta['NM'], (ship_turn['NM'], ship_fire['Y'], ship_thrust['Z']))
         rule3 = ctrl.Rule(bullet_time['L'] & theta_delta['NS'], (ship_turn['NS'], ship_fire['Y'], ship_thrust['Z']))
@@ -92,6 +192,7 @@ class FuzzyController(KesslerController):
         rule5 = ctrl.Rule(bullet_time['L'] & theta_delta['PS'], (ship_turn['PS'], ship_fire['Y'], ship_thrust['Z']))
         rule6 = ctrl.Rule(bullet_time['L'] & theta_delta['PM'], (ship_turn['PM'], ship_fire['Y'], ship_thrust['Z']))
         rule7 = ctrl.Rule(bullet_time['L'] & theta_delta['PL'], (ship_turn['PL'], ship_fire['Y'], ship_thrust['Z']))
+
         rule8 = ctrl.Rule(bullet_time['M'] & theta_delta['NL'], (ship_turn['NL'], ship_fire['Y'], ship_thrust['PS']))
         rule9 = ctrl.Rule(bullet_time['M'] & theta_delta['NM'], (ship_turn['NM'], ship_fire['Y'], ship_thrust['PS']))
         rule10 = ctrl.Rule(bullet_time['M'] & theta_delta['NS'], (ship_turn['NS'], ship_fire['Y'], ship_thrust['PS']))
@@ -99,6 +200,7 @@ class FuzzyController(KesslerController):
         rule12 = ctrl.Rule(bullet_time['M'] & theta_delta['PS'], (ship_turn['PS'], ship_fire['Y'], ship_thrust['PS']))
         rule13 = ctrl.Rule(bullet_time['M'] & theta_delta['PM'], (ship_turn['PM'], ship_fire['Y'], ship_thrust['PS']))
         rule14 = ctrl.Rule(bullet_time['M'] & theta_delta['PL'], (ship_turn['PL'], ship_fire['Y'], ship_thrust['PS']))
+
         rule15 = ctrl.Rule(bullet_time['S'] & theta_delta['NL'], (ship_turn['NL'], ship_fire['Y'], ship_thrust['Z']))
         rule16 = ctrl.Rule(bullet_time['S'] & theta_delta['NM'], (ship_turn['NM'], ship_fire['Y'], ship_thrust['NS']))
         rule17 = ctrl.Rule(bullet_time['S'] & theta_delta['NS'], (ship_turn['NS'], ship_fire['Y'], ship_thrust['NM']))
@@ -106,35 +208,26 @@ class FuzzyController(KesslerController):
         rule19 = ctrl.Rule(bullet_time['S'] & theta_delta['PS'], (ship_turn['PS'], ship_fire['Y'], ship_thrust['NM']))
         rule20 = ctrl.Rule(bullet_time['S'] & theta_delta['PM'], (ship_turn['PM'], ship_fire['Y'], ship_thrust['NS']))
         rule21 = ctrl.Rule(bullet_time['S'] & theta_delta['PL'], (ship_turn['PL'], ship_fire['Y'], ship_thrust['Z']))
-        # Rules for deploying mines
+
         rule_mine_close = ctrl.Rule(asteroid_distance['Close'] & bullet_time['S'], deploy_mine['Deploy'])
         rule_mine_medium = ctrl.Rule(asteroid_distance['Medium'] & bullet_time['L'], deploy_mine['Hold'])
-        rule_mine_far = ctrl.Rule(asteroid_distance['Far'], deploy_mine['Hold'])  # Default: Don't deploy
+        rule_mine_far = ctrl.Rule(asteroid_distance['Far'], deploy_mine['Hold'])
         rule_22 = ctrl.Rule(mine_danger['Safe'], ship_thrust['Z'])
         rule_23 = ctrl.Rule(mine_danger['Danger'], ship_thrust['NM'])
 
-        #DEBUG
-        #bullet_time.view()
-        #theta_delta.view()
-        #ship_turn.view()
-        #ship_fire.view()
-     
-        # Declare the fuzzy controller, add the rules 
-        # This is an instance variable, and thus available for other methods in the same object. See notes.                         
-             
         targeting_control = ctrl.ControlSystem([
         rule1, rule2, rule3, rule4, rule5, rule6, rule7, rule8, rule9,
         rule10, rule11, rule12, rule13, rule14, rule15, rule16, rule17,
         rule18, rule19, rule20, rule21, rule_mine_close, rule_mine_medium, rule_mine_far,
         rule_22, rule_23
         ])
-        
+
         return targeting_control
 
     def get_mines(self, ship_state, game_state):
         for m in game_state["mines"]:
             ship_mine_dist = math.sqrt((ship_state["position"][0] - m["position"][0])**2 + (ship_state["position"][1] - m["position"][1])**2)
-            if (ship_mine_dist < 130):
+            if (ship_mine_dist <= 175):
                 return 1
         return 0
 
@@ -195,9 +288,6 @@ class FuzzyController(KesslerController):
                 asteroid_angle = asteroid_angle * 180 / np.pi
                 if asteroid_angle < 0:
                     asteroid_angle = 360 + asteroid_angle
-                elif asteroid_angle > 360:
-                    print("Error")
-                    # asteroid_angle = asteroid_angle % 360
                 asteroids.append(asteroid)
                 asteroid_angles.append(asteroid_angle)
                 time_collision.append(t_ca)
@@ -232,7 +322,7 @@ class FuzzyController(KesslerController):
         closest_asteroid = None
         
         asteroids, collision_count, asteroid_angles, time_collision, closest_asteroid_distance = self.find_colliding_asteroids(ship_state, game_state)
-        print(collision_count, time_collision)
+
         if collision_count == 0 or self.escaping_mine_frames > 0:
             asteroids = game_state["asteroids"]
 
@@ -351,60 +441,3 @@ class FuzzyController(KesslerController):
     @property
     def name(self) -> str:
         return "Fuzzy Controller"
-
-def fitness(chromosome):
-    my_test_scenario = Scenario(name='Test Scenario',
-                        num_asteroids=10,
-                        ship_states=[
-                        {'position': (400, 400), 'angle': 90, 'lives': 3, 'team': 1},
-                        {'position': (600, 400), 'angle': 90, 'lives': 3, 'team': 2},
-                        ],
-                        map_size=(1000, 800),
-                        time_limit=60,
-                        ammo_limit_multiplier=0,
-                        stop_if_no_ammo=False)
-    game_settings = {'perf_tracker': True,
-                    'graphics_type': GraphicsType.Tkinter,
-                    'realtime_multiplier': 1,
-                    'graphics_obj': None}
-    game = TrainerEnvironment(settings=game_settings) # Use this for max-speed, no-graphics simulation
-    _ = time.perf_counter()
-    fuzzy_controller = FuzzyController(True, chromosome)
-    score, _ = game.run(scenario=my_test_scenario, controllers = [TestController(), fuzzy_controller])
-    
-    return score.teams[1].asteroids_hit - 50*score.teams[1].deaths
-        
-def generate_chromosome():
-    # Thrust MF
-    thrust_nm = np.random.randint(-150, -99)
-    thrust_ns = np.random.randint(-50, 1)
-    thrust_z = np.random.randint(-50, 51)
-    thrust_ps = np.random.randint(50, 151)
-    thrust_pm = np.random.randint(100, 151)
-    thrust_nm = [-200, -200, thrust_nm]
-    thrust_ns = [-200, thrust_ns, 0]
-    thrust_z = [-100, thrust_z, 100]
-    thrust_ps = [0, thrust_ps, 200]
-    thrust_pm = [thrust_pm, 200, 200]
-
-    chromosome = [
-        thrust_nm,
-        thrust_ns,
-        thrust_z,
-        thrust_ps,
-        thrust_pm,
-    ]
-    return chromosome
-
-def get_best_chromosome():        
-    ga = EasyGA.GA()
-    ga.gene_impl = generate_chromosome
-    ga.chromosome_length = 1
-    ga.population_size = 5
-    ga.target_fitness_type = 'max'
-    ga.generation_goal = 1
-    ga.fitness_function_impl = fitness
-    ga.evolve()
-    ga.print_best_chromosome()
-
-    return ga.population[0]
