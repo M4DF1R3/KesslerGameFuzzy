@@ -33,7 +33,7 @@ def generate_chromosome():
     chromosome = thrust_nm + thrust_ns + thrust_z + thrust_ps + thrust_pm
     return chromosome
 
-def fitness(chromosome):
+def fitness(ga_instance, solution, solution_idx):
     """
     Runs the Kessler Game scenario using the given chromosome for the FuzzyController,
     and returns a fitness value. The fitness is defined as:
@@ -41,6 +41,7 @@ def fitness(chromosome):
 
     We want to maximize this fitness. Higher is better.
     """
+    chromosome = solution
     my_test_scenario = Scenario(name='Test Scenario',
                         num_asteroids=10,
                         ship_states=[
@@ -63,12 +64,13 @@ def fitness(chromosome):
     # Fitness: maximize asteroids hit, minimize deaths
     return score.teams[1].asteroids_hit - 50*score.teams[1].deaths
 
-def pygad_fitness_func(solution, solution_idx):
-    """
-    pygad expects a fitness function: solution (1D array), solution_idx (int).
-    We can call our fitness function directly.
-    """
-    return fitness(solution)
+# def fuzzy_pygad_fitness_func(ga_instance, solution, solution_idx):
+#     """
+#     pygad expects a fitness function: solution (1D array), solution_idx (int).
+#     We can call our fitness function directly.
+#     """
+#     print("pygad_fitness_func arguments:", pygad_fitness_func.__code__.co_argcount)
+#     return fitness(solution)
 
 def get_best_chromosome():
     """
@@ -87,7 +89,7 @@ def get_best_chromosome():
     initial_population = np.array(initial_population)
 
     ga_instance = pygad.GA(
-        fitness_func=pygad_fitness_func,
+        fitness_func=fitness,
         sol_per_pop=sol_per_pop,
         num_genes=num_genes,
         initial_population=initial_population,
@@ -126,11 +128,23 @@ class FuzzyController(KesslerController):
         # self.chromosome is a 1D array of length 15
         # Extract sets for ship_thrust
         # NM: [0:3], NS: [3:6], Z: [6:9], PS: [9:12], PM: [12:15]
+        # NM = self.chromosome[0:3]
+        # NS = self.chromosome[3:6]
+        # Z =  self.chromosome[6:9]
+        # PS = self.chromosome[9:12]
+        # PM = self.chromosome[12:15]
         NM = self.chromosome[0:3]
         NS = self.chromosome[3:6]
         Z =  self.chromosome[6:9]
         PS = self.chromosome[9:12]
         PM = self.chromosome[12:15]
+
+        # Sort each triple before applying trimf
+        NM = np.sort(NM)
+        NS = np.sort(NS)
+        Z = np.sort(Z)
+        PS = np.sort(PS)
+        PM = np.sort(PM)
 
         bullet_time = ctrl.Antecedent(np.arange(0,1.0,0.002), 'bullet_time')
         theta_delta = ctrl.Antecedent(np.arange(-1*math.pi/30,math.pi/30,0.1), 'theta_delta')

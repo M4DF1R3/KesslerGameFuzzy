@@ -7,5 +7,6 @@
 3. Activate the environment in command prompt with `KesslerGameFuzzy\Scripts\activate.bat` or `source KesslerGameFuzzy/bin/activate` (Debian)
 5. `pip install -r requirements.txt`
 6. `pip install KesslerGame-2.1.9-py3-none-any.whl`
-7. (Debian) `sudo apt-get install python3-tk`
-8. Run the game with python3.12 scenario_test.py
+7. `pip install pygad`
+8. (Debian) `sudo apt-get install python3-tk`
+9. Run the game with python3.12 scenario_test.py

@@ -40,7 +40,7 @@ def run_test(seed):
     pre = time.perf_counter()
     # chromosome = [[-200, -200, -120], [-200, -22, 0], [-100, 0, 100], [0, 107, 200], [125, 200, 200]]
     chromosome = [-200, -200, -120, -200, -22, 0, -100, 0, 100, 0, 107, 200, 125, 200, 200]
-    fuzzy_controller = FuzzyController(True, chromosome)
+    fuzzy_controller = FuzzyController(True, None)
     # fuzzy_controller2 = FuzzyController2(False, chromosome)
     score, perf_data = game.run(scenario=my_test_scenario, controllers = [fuzzy_controller])
     print(f"Run {seed}")
@@ -58,7 +58,7 @@ if __name__ == "__main__":
     # run_test(0)
     p1_scores = []
     # p2_scores = []
-    for i in range(21):
+    for i in range(1):
         p1_score = run_test(i)
         p1_scores.append(p1_score)
         # p2_scores.append(p2_score)
